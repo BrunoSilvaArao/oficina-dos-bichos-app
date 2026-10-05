@@ -2,89 +2,58 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Appointment, getAllAppointments, setAppointmentStatus } from "@/lib/storage";
+import { backend, BackendAppointment } from "@/lib/backend";
 
 export default function AdminAgenda() {
-  const [items, setItems] = useState<Appointment[]>([]);
+  const [items, setItems] = useState<BackendAppointment[]>([]);
   const [dateFilter, setDateFilter] = useState("");
   const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
 
-  function refresh() {
-    setItems(getAllAppointments());
-  }
+  async function refresh() { setItems(await backend.adminAppointments()); }
 
   useEffect(() => {
-    refresh();
-    window.addEventListener("odb-appointments-updated", refresh);
-    return () => window.removeEventListener("odb-appointments-updated", refresh);
+    (async () => {
+      if (backend.configured()) {
+        if (!(await backend.session())) { window.location.href="/login"; return; }
+        const p = await backend.profile(); if (!p || p.role === "client") { window.location.href="/"; return; }
+      }
+      await refresh();
+    })().catch((e)=>setError(e instanceof Error?e.message:"Erro ao carregar agenda.")).finally(()=>setLoading(false));
   }, []);
 
-  const visible = useMemo(
-    () => dateFilter ? items.filter((x) => x.date === dateFilter) : items,
-    [items, dateFilter]
-  );
+  const visible = useMemo(() => dateFilter ? items.filter((x) => x.date === dateFilter) : items, [items,dateFilter]);
 
-  function status(id: string, nextStatus: string) {
-    setAppointmentStatus(id, nextStatus);
-    refresh();
-    if (nextStatus === "Cancelado") {
-      setMessage("Agendamento cancelado. O horário foi liberado novamente para o mesmo profissional/equipe.");
-      window.setTimeout(() => setMessage(""), 3500);
+
+  async function reschedule(a: BackendAppointment) {
+    const nextDate = window.prompt("Nova data (AAAA-MM-DD):", a.date);
+    if (!nextDate) return;
+    const nextTime = window.prompt("Novo horário (HH:MM):", a.time);
+    if (!nextTime) return;
+    try {
+      setError("");
+      await backend.adminRescheduleAppointment(a.id, nextDate, nextTime);
+      await refresh();
+      setMessage("Agendamento reagendado com sucesso.");
+      window.setTimeout(()=>setMessage(""),3000);
+    } catch(e) {
+      const msg = e instanceof Error ? e.message : "Não foi possível reagendar.";
+      setError(msg.includes("SLOT_UNAVAILABLE") ? "Esse novo horário não está disponível para o profissional." : msg);
     }
   }
 
-  return (
-    <main className="min-h-screen bg-slate-50 p-6">
-      <div className="mx-auto max-w-7xl">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <Link href="/admin" className="font-bold teal">‹ Dashboard</Link>
-            <h1 className="mt-2 text-4xl font-black">Agenda <span className="teal">administrativa</span></h1>
-            <p className="mt-1 text-slate-500">Cada profissional/equipe possui sua própria ocupação de horário.</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} className="rounded-xl border border-slate-200 bg-white px-4 py-3" />
-            {dateFilter && <button onClick={() => setDateFilter("")} className="rounded-xl border border-slate-200 bg-white px-4 py-3 font-bold">Limpar data</button>}
-            <Link href="/admin/horarios" className="rounded-xl border border-teal-200 bg-white px-5 py-3 font-black teal">⚙ Horários disponíveis</Link>
-            <Link href={dateFilter ? `/agenda/novo?data=${dateFilter}` : "/agenda/novo"} className="primary px-5 py-3">＋ Novo agendamento</Link>
-          </div>
-        </div>
+  async function status(id: string, nextStatus: string) {
+    try {
+      await backend.setAppointmentStatus(id,nextStatus); await refresh();
+      setMessage(nextStatus === "Cancelado" ? "Agendamento cancelado. O horário foi liberado novamente." : `Status alterado para ${nextStatus}.`);
+      window.setTimeout(()=>setMessage(""),3000);
+    } catch(e){ setError(e instanceof Error?e.message:"Não foi possível alterar o status."); }
+  }
 
-        {message && <div className="mt-4 rounded-2xl bg-green-50 p-4 font-bold text-green-700">✓ {message}</div>}
-
-        <div className="card mt-5 overflow-x-auto p-5">
-          {visible.length === 0 ? (
-            <div className="py-12 text-center">
-              <div className="text-4xl">📅</div>
-              <h2 className="mt-3 text-xl font-black">Nenhum agendamento nesta data</h2>
-              <p className="mt-1 text-slate-500">Selecione outra data ou crie um novo horário.</p>
-            </div>
-          ) : (
-            <table className="w-full min-w-[1100px] text-left">
-              <thead><tr className="text-sm text-slate-500"><th className="py-3">DATA</th><th>HORÁRIO</th><th>PET</th><th>TUTOR</th><th>SERVIÇO</th><th>PROFISSIONAL / EQUIPE</th><th>SETOR</th><th>STATUS</th><th>AÇÃO</th></tr></thead>
-              <tbody>
-                {visible.map((x) => (
-                  <tr key={x.id} className={`border-t ${x.status === "Cancelado" ? "bg-slate-50 text-slate-400" : ""}`}>
-                    <td className="py-4">{x.date.split("-").reverse().join("/")}</td>
-                    <td className="font-black teal">{x.time}</td>
-                    <td className="font-bold">{x.pet}</td>
-                    <td>{x.tutor || "Cliente"}</td>
-                    <td>{x.service}</td>
-                    <td>{x.professionalName || "Equipe padrão"}</td>
-                    <td>{x.sector || "Clínica"}</td>
-                    <td><span className="pill">{x.status || "Agendado"}</span></td>
-                    <td>
-                      <select value={x.status || "Agendado"} onChange={(e) => status(x.id, e.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-700">
-                        <option>Agendado</option><option>Confirmado</option><option>Em andamento</option><option>Concluído</option><option>Cancelado</option>
-                      </select>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </div>
-    </main>
-  );
+  return <main className="min-h-screen bg-slate-50 p-5 md:p-8"><div className="mx-auto max-w-7xl"><div className="flex flex-wrap items-end justify-between gap-3"><div><Link href="/admin" className="font-bold teal">‹ Dashboard</Link><h1 className="mt-2 text-4xl font-black">Agenda <span className="teal">administrativa</span></h1><p className="muted mt-1">Acompanhe todos os setores e profissionais em um só lugar.</p></div><Link href="/admin/horarios" className="primary px-5 py-3">Gerenciar horários</Link></div>
+  {message&&<div className="mt-4 rounded-2xl bg-green-50 p-4 font-bold text-green-700">✓ {message}</div>}{error&&<div className="mt-4 rounded-2xl bg-red-50 p-4 font-bold text-red-700">⚠ {error}</div>}
+  <section className="card mt-5 p-5"><div className="flex flex-wrap items-end gap-3"><label><span className="field-label">Filtrar por data</span><input type="date" className="field" value={dateFilter} onChange={(e)=>setDateFilter(e.target.value)}/></label>{dateFilter&&<button className="rounded-xl bg-slate-100 px-4 py-3 font-bold" onClick={()=>setDateFilter("")}>Limpar</button>}<span className="pill">{visible.length} agendamentos</span></div></section>
+  <section className="card mt-5 overflow-x-auto p-5">{loading?<p className="font-bold">Carregando...</p>:<table className="w-full min-w-[1100px] text-left"><thead className="text-sm text-slate-500"><tr><th className="py-3">DATA</th><th>HORA</th><th>PET / TUTOR</th><th>SERVIÇO</th><th>PROFISSIONAL</th><th>STATUS</th><th>AÇÕES</th></tr></thead><tbody>{visible.map((a)=><tr key={a.id} className="border-t border-slate-100"><td className="py-4">{a.date.split("-").reverse().join("/")}</td><td className="font-black teal">{a.time}</td><td><b>{a.pet}</b><div className="text-sm text-slate-500">{a.tutor||"—"}</div></td><td>{a.service}</td><td>{a.professionalName}<div className="text-xs text-slate-500">{a.sector}</div></td><td><span className="pill">{a.status}</span></td><td><div className="flex flex-wrap gap-2">{a.status!=="Cancelado"&&<button onClick={()=>reschedule(a)} className="rounded-xl bg-teal-50 px-3 py-2 text-xs font-black text-teal-700">Reagendar</button>}{["Confirmado","Em andamento","Concluído","Cancelado"].map((s)=><button key={s} disabled={a.status===s} onClick={()=>status(a.id,s)} className={`rounded-xl px-3 py-2 text-xs font-black ${s==="Cancelado"?"bg-red-50 text-red-600":"bg-slate-100 text-slate-700"} disabled:opacity-40`}>{s}</button>)}</div></td></tr>)}</tbody></table>}</section>
+  </div></main>;
 }

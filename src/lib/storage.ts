@@ -221,10 +221,10 @@ export const storage = {
   },
   profile: {
     get: () => read(PROFILE, {
-      name: "Bruno Silva",
-      phone: "(35) 99991-1502",
-      email: "bruno.silva@email.com",
-      city: "Ibiraci - MG",
+      name: "Cliente",
+      phone: "",
+      email: "",
+      city: "",
     }),
     set: (profile: { name: string; phone: string; email: string; city: string }) => write(PROFILE, profile),
   },

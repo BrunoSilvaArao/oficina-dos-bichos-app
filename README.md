@@ -1,69 +1,99 @@
-# Oficina dos Bichos — Web App / PWA — V4
+# Oficina dos Bichos — Web App / PWA — V5
 
-Protótipo funcional em **Next.js + TypeScript + Tailwind CSS** para a Oficina dos Bichos.
+Versão preparada para transformar o protótipo em um sistema com dados centralizados no **Supabase** e publicação no **Vercel**.
 
-## O que mudou na V4
+## O que está implementado
 
-- Cancelamento pelo cliente na própria agenda.
-- Cancelamento no painel administrativo libera o horário automaticamente.
-- Agenda por **profissional/equipe**, não mais um único horário global da clínica.
-- Exemplo: Veterinário às 14:00 e Banho & Tosa às 14:00 podem coexistir quando usam recursos diferentes.
-- Dois atendimentos do mesmo profissional/equipe no mesmo horário continuam bloqueados.
-- Painel administrativo para cadastrar profissionais/equipes.
-- Painel para configurar horários por data ou repetir semanalmente.
-- Possibilidade de bloquear uma data inteira para um serviço/profissional.
-- Painel administrativo da Loja Pet para cadastrar, editar, ocultar e excluir produtos.
-- Cadastro de preço, estoque, categoria, descrição e foto/emoji do produto.
-- Loja do cliente lê o catálogo configurado pelo administrador.
-- Indicador de estoque e itens com estoque baixo no painel.
+- Cadastro, login, logout e recuperação de senha via Supabase Auth.
+- Perfil do cliente e cadastro de pets.
+- Agendamento por serviço e profissional/equipe.
+- Horários controlados pelo painel administrativo.
+- Regras semanais e bloqueios por data específica.
+- Proteção no banco contra dois agendamentos ativos para o mesmo profissional, data e horário.
+- Cancelamento pelo cliente com liberação automática do horário.
+- Painel administrativo de agenda e alteração de status.
+- Cadastro/ativação de profissionais e equipes por setor.
+- Loja Pet com catálogo, preço, estoque e visibilidade.
+- Carrinho local e checkout transacional no banco, com baixa de estoque.
+- PWA/manifest para instalação no celular.
+- RLS (Row Level Security) para separar dados de clientes e administração.
+- Modo demonstração local quando as variáveis do Supabase não estão configuradas.
 
-## Rotas principais
+## 1. Instalar e rodar
 
-### Cliente
-- `/` — início
-- `/agenda` — calendário e agendamentos
-- `/agenda/novo` — novo agendamento
-- `/pets` — pets
-- `/loja` — loja
-- `/carrinho` — carrinho
-- `/perfil` — perfil
+Requer Node.js 20+.
 
-### Administração
-- `/admin` — dashboard
-- `/admin/agenda` — agenda administrativa e status
-- `/admin/horarios` — profissionais/equipes e disponibilidade
-- `/admin/produtos` — produtos, preços e estoque
-
-## Rodar no Windows
-
-No terminal, dentro da pasta do projeto:
-
-```powershell
-npm.cmd install
-npm.cmd run dev
+```bash
+npm install
+npm run dev
 ```
 
-Depois abra:
+Abra `http://localhost:3000`.
 
-- Cliente: `http://localhost:3000`
-- Admin: `http://localhost:3000/admin`
+## 2. Preparar o Supabase
 
-## Teste recomendado
+No projeto escolhido do Supabase, execute o arquivo:
 
-1. Entre em `/admin/horarios`.
-2. Escolha o Dr. John, serviço Veterinário, uma data e disponibilize 14:00.
-3. Escolha a Equipe Banho & Tosa, a mesma data e também disponibilize 14:00.
-4. No app do cliente, faça um atendimento veterinário às 14:00.
-5. Faça outro Banho & Tosa às 14:00 — deve ser permitido.
-6. Tente outro atendimento com o mesmo profissional/equipe às 14:00 — deve ficar ocupado.
-7. Cancele o primeiro agendamento no cliente ou admin.
-8. Volte a criar um agendamento com o mesmo profissional às 14:00 — o horário deve ter sido liberado.
-9. Entre em `/admin/produtos`, cadastre um produto e depois confira em `/loja`.
+```text
+supabase/migrations/20261002_production.sql
+```
 
-## Importante sobre esta versão
+Ele cria as tabelas, índices, políticas de segurança, funções RPC e dados iniciais.
 
-A V4 ainda usa **localStorage** para demonstração. Isso significa que os dados ficam somente no navegador/computador atual.
+Depois copie `.env.example` para `.env.local` e preencha:
 
-Para uso real na clínica, a próxima etapa recomendada é conectar o sistema ao **Supabase/PostgreSQL**, com autenticação, perfis de acesso e bloqueio de concorrência no banco. Assim, cliente e clínica poderão usar dispositivos diferentes e o mesmo horário não poderá ser reservado simultaneamente por duas pessoas.
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://SEU-PROJETO.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=SUA_CHAVE_PUBLICA
+NEXT_PUBLIC_CLINIC_WHATSAPP=5535999999999
+```
 
-Fotos de produtos nesta versão também ficam no armazenamento local do navegador e são limitadas para demonstração. Na versão real, devem ser enviadas ao Supabase Storage.
+Use apenas a chave pública/anon no frontend. **Nunca** coloque `service_role` em variável `NEXT_PUBLIC_*`.
+
+## 3. Criar o administrador da clínica
+
+1. Abra `/login` e crie a conta do responsável.
+2. Confirme o e-mail, se a confirmação estiver habilitada no Supabase Auth.
+3. No SQL Editor, edite e execute:
+
+```text
+supabase/SET_ADMIN.sql
+```
+
+Depois de novo login, a conta terá acesso ao painel `/admin`.
+
+## 4. Configurações importantes do Supabase Auth
+
+Em Authentication > URL Configuration, configure a URL publicada do sistema como **Site URL** e permita o endereço `/login` nos redirects. Isso é necessário para confirmação de cadastro e recuperação de senha.
+
+## 5. Publicar no Vercel
+
+No projeto do Vercel, adicione as mesmas variáveis de ambiente usadas no `.env.local` e faça um novo deploy. O projeto continua sendo um Next.js padrão, sem dependência de chave secreta no navegador.
+
+## Estrutura principal
+
+```text
+src/app/                 telas e rotas Next.js
+src/lib/backend.ts       camada de acesso a dados
+src/lib/supabase-rest.ts autenticação e REST/RPC do Supabase
+src/lib/storage.ts       fallback do modo demonstração
+supabase/migrations/     banco, RLS, funções e dados iniciais
+supabase/SET_ADMIN.sql   promoção da conta administrativa
+```
+
+## Observação de implantação
+
+O código está pronto para apontar para um projeto Supabase. A migração deve ser aplicada **somente no projeto definitivo da clínica**, para evitar criar a estrutura na base errada.
+
+## V6 — Agenda semanal e pedidos
+
+Esta versão adiciona:
+- expediente semanal por profissional/serviço, com repetição automática;
+- exceções por data e bloqueio geral da clínica;
+- cálculo dos horários pela duração de cada serviço;
+- bloqueio por profissional, permitindo atendimentos paralelos por profissionais diferentes;
+- reagendamento administrativo e liberação de horário ao cancelar;
+- checkout com retirada ou entrega e endereço completo;
+- painel administrativo de pedidos, itens, cliente, pagamento, recebimento e status.
+
+A migração correspondente está em `supabase/V6_AGENDA_PEDIDOS.sql`.

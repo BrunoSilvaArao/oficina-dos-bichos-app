@@ -1,48 +1,41 @@
-# Arquitetura prevista — Oficina dos Bichos
+# Arquitetura — Oficina dos Bichos V5
 
-## Frontend
-- Next.js / React / TypeScript
-- Tailwind CSS
-- PWA mobile-first para clientes
-- Dashboard responsivo para administração
+## Aplicação
 
-## Módulos do MVP
-1. Autenticação e tutores
-2. Pets
-3. Serviços
-4. Profissionais/equipes
-5. Disponibilidade e escalas
-6. Agendamentos
-7. Cancelamentos e status
-8. Loja / catálogo / estoque
-9. Carrinho e pedidos
-10. Painel administrativo
+- **Frontend/PWA:** Next.js 16 + React 19 + TypeScript + Tailwind CSS.
+- **Hospedagem:** Vercel.
+- **Backend de dados:** Supabase Postgres + Auth + PostgREST/RPC.
+- **Fallback local:** `localStorage`, apenas para demonstração sem Supabase configurado.
 
-## Regra de agenda
-A unidade de conflito é o **profissional/equipe (resourceId)**.
+## Dados de produção
 
-- Mesmo profissional + mesma data + mesmo horário: bloqueado.
-- Profissionais/equipes diferentes + mesmo horário: permitido.
-- Status `Cancelado`: não ocupa horário.
-- Disponibilidade específica de uma data tem prioridade sobre regra semanal.
+O banco possui:
 
-## Estrutura sugerida no Supabase
+- `profiles`: conta/perfil do usuário e papel (`client`, `staff`, `admin`).
+- `pets`: pets pertencentes ao usuário autenticado.
+- `services`: serviços da clínica.
+- `professionals`: veterinários/equipes/setores.
+- `professional_services`: vínculo entre profissional e serviço.
+- `availability_rules`: grade semanal e exceções por data.
+- `appointments`: agendamentos.
+- `products`: catálogo e estoque.
+- `orders` e `order_items`: pedidos da loja.
 
-- `profiles`
-- `pets`
-- `services`
-- `professionals`
-- `professional_services`
-- `availability_rules`
-- `appointments`
-- `medical_records`
-- `vaccines`
-- `products`
-- `orders`
-- `order_items`
+## Segurança
 
-No banco real, deve existir uma proteção transacional/constraint para impedir reserva duplicada do mesmo profissional, data e horário enquanto o agendamento estiver ativo.
+A aplicação usa RLS no Supabase. Clientes só leem/alteram os próprios dados; rotinas administrativas dependem de papel `admin` ou `staff`. O papel não pode ser promovido pelo próprio cliente. A função de promoção por e-mail é destinada ao SQL Editor e não é liberada para `anon`/`authenticated`.
 
-## Armazenamento
-- V4: localStorage, somente para protótipo.
-- Produção: Supabase PostgreSQL + Supabase Auth + Supabase Storage.
+## Concorrência de agenda
+
+Além da checagem de disponibilidade, existe índice único parcial em:
+
+```text
+(professional_id, appointment_date, appointment_time)
+WHERE status <> 'cancelled'
+```
+
+Assim, mesmo que duas pessoas tentem confirmar a mesma vaga simultaneamente, o banco aceita somente uma. Quando o agendamento é cancelado, a vaga volta a ficar livre.
+
+## Checkout
+
+`place_order` executa a validação e a baixa de estoque em uma transação no banco. Os produtos são bloqueados durante a operação para impedir venda concorrente acima do estoque disponível.

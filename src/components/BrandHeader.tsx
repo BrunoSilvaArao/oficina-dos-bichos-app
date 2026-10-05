@@ -1,6 +1,5 @@
 "use client";
 import Image from "next/image";
-import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -15,7 +14,7 @@ export default function BrandHeader({ back = false }: { back?: boolean }) {
       </div>
       <div className="flex shrink-0 gap-2">
         <button onClick={() => setNotifications((v) => !v)} aria-label="Notificações" className="grid h-10 w-10 cursor-pointer place-items-center rounded-full bg-slate-100 text-base">🔔</button>
-        <a aria-label="WhatsApp" className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-base" href="https://wa.me/5535999911502" target="_blank" rel="noreferrer">💬</a>
+        <a aria-label="WhatsApp" className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-base" href={`https://wa.me/${(process.env.NEXT_PUBLIC_CLINIC_WHATSAPP || "5535999999999").replace(/\D/g, "")}`} target="_blank" rel="noreferrer">💬</a>
       </div>
       {notifications && (
         <div className="card absolute right-4 top-[64px] z-50 w-[260px] p-4 text-sm">

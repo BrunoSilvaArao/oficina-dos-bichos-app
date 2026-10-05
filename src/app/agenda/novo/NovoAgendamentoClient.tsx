@@ -4,16 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import BrandHeader from "@/components/BrandHeader";
 import MobilePage from "@/components/MobilePage";
-import {
-  getAllAppointments,
-  getAvailableTimes,
-  getProfessionalsForService,
-  isSlotOccupied,
-  Professional,
-  storage,
-} from "@/lib/storage";
-
-const services = ["Veterinário", "Vacinação", "Banho & Tosa", "Hotelzinho", "Creche Pet"];
+import { backend, BackendPet, BackendProfessional, BackendService } from "@/lib/backend";
 
 function todayIso() {
   const now = new Date();
@@ -26,185 +17,139 @@ function todayIso() {
 export default function NovoAgendamentoClient() {
   const router = useRouter();
   const search = useSearchParams();
-  const [pet, setPet] = useState(search.get("pet") || "Thor");
-  const [service, setService] = useState(search.get("servico") || "Veterinário");
+  const [pets, setPets] = useState<BackendPet[]>([]);
+  const [services, setServices] = useState<BackendService[]>([]);
+  const [professionals, setProfessionals] = useState<BackendProfessional[]>([]);
+  const [petId, setPetId] = useState(search.get("petId") || "");
+  const [serviceId, setServiceId] = useState("");
+  const [professionalId, setProfessionalId] = useState("");
   const [date, setDate] = useState(search.get("data") || "");
   const [time, setTime] = useState("");
   const [notes, setNotes] = useState("");
-  const [extraPets, setExtraPets] = useState<string[]>([]);
-  const [professionals, setProfessionals] = useState<Professional[]>([]);
-  const [professionalId, setProfessionalId] = useState("");
-  const [version, setVersion] = useState(0);
+  const [times, setTimes] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadingTimes, setLoadingTimes] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    setExtraPets(storage.pets.get().map((p) => p.name));
-    const refresh = () => setVersion((v) => v + 1);
-    window.addEventListener("odb-appointments-updated", refresh);
-    window.addEventListener("odb-schedule-updated", refresh);
-    return () => {
-      window.removeEventListener("odb-appointments-updated", refresh);
-      window.removeEventListener("odb-schedule-updated", refresh);
-    };
-  }, []);
+    (async () => {
+      if (backend.configured() && !(await backend.session())) {
+        router.replace("/login");
+        return;
+      }
+      const [petItems, serviceItems] = await Promise.all([backend.pets(), backend.services()]);
+      setPets(petItems);
+      setServices(serviceItems);
+      setPetId((current) => current && petItems.some((p) => p.id === current) ? current : (petItems[0]?.id || ""));
+      const requestedService = search.get("servico");
+      const firstService = serviceItems.find((s) => s.name === requestedService || s.slug === requestedService) || serviceItems[0];
+      setServiceId(firstService?.id || "");
+      setLoading(false);
+    })().catch((err) => { setError(err instanceof Error ? err.message : "Não foi possível carregar o agendamento."); setLoading(false); });
+  }, [router, search]);
+
+  const selectedService = useMemo(() => services.find((s) => s.id === serviceId), [services, serviceId]);
+  const selectedProfessional = useMemo(() => professionals.find((p) => p.id === professionalId), [professionals, professionalId]);
+  const selectedPet = useMemo(() => pets.find((p) => p.id === petId), [pets, petId]);
 
   useEffect(() => {
-    const available = getProfessionalsForService(service);
-    setProfessionals(available);
-    setProfessionalId((current) => available.some((p) => p.id === current) ? current : (available[0]?.id || ""));
-    setTime("");
-    setError("");
-  }, [service, version]);
-
-  const selectedProfessional = useMemo(
-    () => professionals.find((p) => p.id === professionalId),
-    [professionals, professionalId],
-  );
-
-  const availableTimes = useMemo(
-    () => getAvailableTimes(date, service, professionalId),
-    [date, service, professionalId, version],
-  );
-
-  const appointments = useMemo(() => getAllAppointments(), [version]);
-
-  const occupiedTimes = useMemo(() => {
-    if (!date || !professionalId) return new Set<string>();
-    return new Set(
-      availableTimes.filter((candidate) => isSlotOccupied(date, candidate, professionalId, appointments)),
-    );
-  }, [availableTimes, appointments, date, professionalId]);
+    if (!serviceId || !selectedService) return;
+    setTimes([]); setTime("");
+    backend.professionals(serviceId, selectedService.name)
+      .then((items) => {
+        setProfessionals(items);
+        setProfessionalId((current) => items.some((p) => p.id === current) ? current : (items[0]?.id || ""));
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : "Não foi possível carregar os profissionais."));
+  }, [serviceId, selectedService]);
 
   useEffect(() => {
-    if (!date || !professionalId) return;
-    if (!time || occupiedTimes.has(time) || !availableTimes.includes(time)) {
-      setTime(availableTimes.find((candidate) => !occupiedTimes.has(candidate)) || "");
-    }
-    setError("");
-  }, [date, professionalId, availableTimes, occupiedTimes, time]);
+    if (!date || !serviceId || !professionalId || !selectedService) { setTimes([]); setTime(""); return; }
+    setLoadingTimes(true); setError("");
+    backend.availableTimes(date, serviceId, professionalId, selectedService.name)
+      .then((items) => { setTimes(items); setTime((current) => items.includes(current) ? current : ""); })
+      .catch((err) => setError(err instanceof Error ? err.message : "Não foi possível consultar os horários."))
+      .finally(() => setLoadingTimes(false));
+  }, [date, serviceId, professionalId, selectedService]);
 
-  function submit(e: FormEvent) {
+  async function submit(e: FormEvent) {
     e.preventDefault();
     setError("");
+    if (!petId) return setError("Cadastre ou selecione um pet para continuar.");
+    if (!serviceId || !selectedService) return setError("Escolha o serviço.");
+    if (!professionalId || !selectedProfessional) return setError("Escolha o profissional ou equipe.");
+    if (!date || !time) return setError("Escolha a data e o horário.");
 
-    if (!date) return setError("Escolha uma data para continuar.");
-    if (!professionalId || !selectedProfessional) return setError("Não há profissional ou equipe disponível para este serviço.");
-    if (!time) return setError("Não há horários disponíveis nesta data para este profissional/equipe.");
-
-    const latest = getAllAppointments();
-    if (isSlotOccupied(date, time, professionalId, latest)) {
-      setVersion((v) => v + 1);
-      setError(`O horário ${time} já está ocupado para ${selectedProfessional.name}. Escolha outro horário.`);
-      return;
+    try {
+      setSubmitting(true);
+      await backend.bookAppointment({
+        petId,
+        petName: selectedPet?.name,
+        serviceId,
+        serviceName: selectedService.name,
+        professionalId,
+        professionalName: selectedProfessional.name,
+        sector: selectedProfessional.sector,
+        date,
+        time,
+        notes,
+      });
+      router.push(`/agenda?criado=1&data=${date}`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Não foi possível agendar.";
+      setError(message.includes("SLOT_UNAVAILABLE") ? "Este horário acabou de ser ocupado. Escolha outro horário." : message);
+      try {
+        setTimes(await backend.availableTimes(date, serviceId, professionalId, selectedService.name));
+        setTime("");
+      } catch { /* keep original error */ }
+    } finally {
+      setSubmitting(false);
     }
-
-    storage.appointments.add({
-      id: String(Date.now()),
-      pet,
-      service,
-      date,
-      time,
-      tutor: storage.profile.get().name || "Cliente",
-      notes,
-      status: "Agendado",
-      resourceId: professionalId,
-      professionalId,
-      professionalName: selectedProfessional.name,
-      sector: selectedProfessional.sector,
-    });
-    router.push(`/agenda?criado=1&data=${date}`);
   }
+
+  if (loading) return <MobilePage><BrandHeader back /><div className="px-5"><div className="card mt-5 p-6 text-center font-bold">Carregando agenda...</div></div></MobilePage>;
 
   return (
     <MobilePage>
       <BrandHeader back />
       <div className="px-5 pb-5">
-        <h1 className="mt-2 text-4xl font-black">
-          Novo <span className="teal">agendamento</span>
-        </h1>
-        <p className="muted mt-2">Agora cada setor/profissional possui sua própria agenda.</p>
+        <h1 className="mt-2 text-4xl font-black">Novo <span className="teal">agendamento</span></h1>
+        <p className="muted mt-2">Cada profissional ou equipe possui sua própria agenda.</p>
 
-        <div className="mt-4 rounded-2xl bg-cyan-50 p-4 text-sm text-cyan-900">
-          <b>Exemplo:</b> o veterinário pode atender às 14:00 e o Banho &amp; Tosa também às 14:00, porque são recursos diferentes. Dois atendimentos com o mesmo profissional no mesmo horário continuam bloqueados.
-        </div>
-
-        <form onSubmit={submit} className="card mt-5 space-y-5 p-5">
-          <label className="block">
-            <span className="field-label">Pet</span>
-            <select value={pet} onChange={(e) => setPet(e.target.value)} className="field">
-              <option>Thor</option>
-              <option>Luna</option>
-              {extraPets.filter((p) => !["Thor", "Luna"].includes(p)).map((p) => <option key={p}>{p}</option>)}
-            </select>
-          </label>
-
-          <label className="block">
-            <span className="field-label">Serviço</span>
-            <select value={service} onChange={(e) => setService(e.target.value)} className="field">
-              {services.map((s) => <option key={s}>{s}</option>)}
-            </select>
-          </label>
-
-          <label className="block">
-            <span className="field-label">Profissional / equipe</span>
-            <select value={professionalId} onChange={(e) => setProfessionalId(e.target.value)} className="field" disabled={!professionals.length}>
-              {!professionals.length && <option value="">Nenhum disponível</option>}
-              {professionals.map((p) => <option value={p.id} key={p.id}>{p.name} — {p.sector}</option>)}
-            </select>
-          </label>
-
-          <label className="block">
-            <span className="field-label">Data</span>
-            <input required min={todayIso()} type="date" value={date} onChange={(e) => setDate(e.target.value)} className="field" />
-          </label>
-
-          <div>
-            <span className="field-label">Horário</span>
-            {!date && <p className="mb-2 text-sm text-slate-500">Primeiro escolha a data para consultar a escala cadastrada pela clínica.</p>}
-            {date && professionalId && availableTimes.length === 0 && (
-              <div className="rounded-2xl bg-amber-50 p-3 text-sm font-bold text-amber-800">
-                A clínica ainda não disponibilizou horários para {selectedProfessional?.name} nesta data.
-              </div>
-            )}
-            <div className="mt-2 grid grid-cols-3 gap-2">
-              {availableTimes.map((t) => {
-                const occupied = occupiedTimes.has(t);
-                return (
-                  <button
-                    type="button"
-                    key={t}
-                    disabled={occupied}
-                    onClick={() => { setTime(t); setError(""); }}
-                    className={`min-h-14 rounded-xl px-2 py-2 font-black transition ${
-                      occupied
-                        ? "cursor-not-allowed bg-slate-100 text-slate-400"
-                        : time === t
-                        ? "bg-teal-500 text-white"
-                        : "bg-teal-50 text-teal-700"
-                    }`}
-                  >
-                    <span className="block">{t}</span>
-                    {occupied && <span className="mt-0.5 block text-[10px] font-bold uppercase">Ocupado</span>}
-                  </button>
-                );
-              })}
-            </div>
-            {date && availableTimes.length > 0 && (
-              <p className="mt-2 text-xs text-slate-500">Um cancelamento libera o horário novamente de forma automática.</p>
-            )}
+        {pets.length === 0 ? (
+          <div className="card mt-5 p-6 text-center">
+            <div className="text-5xl">🐾</div>
+            <h2 className="mt-3 text-xl font-black">Cadastre um pet primeiro</h2>
+            <p className="muted mt-1">O agendamento fica vinculado ao pet e ao tutor.</p>
+            <button onClick={() => router.push("/pets/novo")} className="primary mt-4 px-5 py-3">Cadastrar pet</button>
           </div>
+        ) : (
+          <form onSubmit={submit} className="card mt-5 space-y-5 p-5">
+            <label className="block"><span className="field-label">Pet</span><select value={petId} onChange={(e) => setPetId(e.target.value)} className="field">{pets.map((p) => <option value={p.id} key={p.id}>{p.name}</option>)}</select></label>
 
-          <label className="block">
-            <span className="field-label">Observações</span>
-            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="field min-h-24 resize-none" placeholder="Ex.: pet ansioso, preferência de atendimento..." />
-          </label>
+            <label className="block"><span className="field-label">Serviço</span><select value={serviceId} onChange={(e) => setServiceId(e.target.value)} className="field">{services.map((s) => <option value={s.id} key={s.id}>{s.name} — {s.sector}</option>)}</select></label>
 
-          {error && <div className="rounded-2xl bg-red-50 p-3 text-sm font-bold text-red-700">⚠ {error}</div>}
+            <label className="block"><span className="field-label">Profissional / equipe</span><select value={professionalId} onChange={(e) => setProfessionalId(e.target.value)} className="field" disabled={!professionals.length}>{!professionals.length && <option value="">Nenhum disponível</option>}{professionals.map((p) => <option value={p.id} key={p.id}>{p.name} — {p.sector}</option>)}</select></label>
 
-          <button className="primary w-full py-4 text-lg disabled:cursor-not-allowed disabled:opacity-50" type="submit" disabled={!date || !time || !professionalId}>
-            Confirmar agendamento
-          </button>
-        </form>
+            <label className="block"><span className="field-label">Data</span><input required min={todayIso()} type="date" value={date} onChange={(e) => setDate(e.target.value)} className="field" /></label>
+
+            <div>
+              <span className="field-label">Horário</span>
+              {!date && <p className="mb-2 text-sm text-slate-500">Escolha a data para consultar a disponibilidade.</p>}
+              {loadingTimes && <div className="rounded-2xl bg-slate-50 p-3 text-sm font-bold text-slate-600">Consultando horários...</div>}
+              {!loadingTimes && date && professionalId && times.length === 0 && <div className="rounded-2xl bg-amber-50 p-3 text-sm font-bold text-amber-800">Não há horários livres para este profissional/equipe nesta data.</div>}
+              <div className="mt-2 grid grid-cols-3 gap-2">
+                {times.map((t) => <button type="button" key={t} onClick={() => setTime(t)} className={`min-h-14 rounded-xl px-2 py-2 font-black transition ${time === t ? "bg-teal-500 text-white" : "bg-teal-50 text-teal-700"}`}>{t}</button>)}
+              </div>
+              {times.length > 0 && <p className="mt-2 text-xs text-slate-500">A reserva é validada novamente no servidor ao confirmar, evitando dupla marcação.</p>}
+            </div>
+
+            <label className="block"><span className="field-label">Observações</span><textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="field min-h-24 resize-none" placeholder="Ex.: pet ansioso, preferência de atendimento..." /></label>
+            {error && <div className="rounded-2xl bg-red-50 p-3 text-sm font-bold text-red-700">⚠ {error}</div>}
+            <button className="primary w-full py-4 text-lg disabled:cursor-not-allowed disabled:opacity-50" type="submit" disabled={!date || !time || !professionalId || submitting}>{submitting ? "Confirmando..." : "Confirmar agendamento"}</button>
+          </form>
+        )}
       </div>
     </MobilePage>
   );
