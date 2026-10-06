@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { backend, BackendAvailabilityRule, BackendClinicException, BackendProfessional, BackendService } from "@/lib/backend";
 import AdminMobileNav from "@/components/AdminMobileNav";
+import AdminMobileTopBar from "@/components/AdminMobileTopBar";
 
 const WEEKDAYS = [
   { value: 1, label: "Segunda" }, { value: 2, label: "Terça" }, { value: 3, label: "Quarta" },
@@ -89,7 +90,7 @@ export default function AdminHorariosPage(){
 
   const datedRules=rules.filter(r=>Boolean(r.date));
 
-  return <main className="admin-page min-h-screen bg-slate-50 p-5 md:p-8"><div className="mx-auto max-w-7xl">
+  return <main className="admin-page min-h-screen bg-slate-50 p-5 md:p-8"><AdminMobileTopBar/><div className="mx-auto max-w-7xl">
     <div className="flex flex-wrap items-end justify-between gap-3"><div><Link href="/admin" className="font-bold teal">‹ Dashboard</Link><h1 className="mt-2 text-4xl font-black">Profissionais &amp; <span className="teal">horários</span></h1><p className="mt-1 text-slate-500">Regra semanal padrão, profissionais e exceções por data.</p></div><Link href="/admin/agenda" className="primary px-5 py-3">Ver agenda</Link></div>
     {message&&<div className="mt-4 rounded-2xl bg-green-50 p-4 font-bold text-green-700">✓ {message}</div>}{error&&<div className="mt-4 rounded-2xl bg-red-50 p-4 font-bold text-red-700">⚠ {error}</div>}
     <div className="mt-5 grid gap-2 rounded-2xl bg-white p-2 shadow-sm md:grid-cols-3">{[["weekly","Horário semanal"],["professionals","Profissionais e serviços"],["exceptions","Bloqueios e exceções"]].map(([v,l])=><button key={v} onClick={()=>setTab(v as any)} className={`rounded-xl px-4 py-3 font-black ${tab===v?"bg-teal-500 text-white":"bg-slate-50 text-slate-600"}`}>{l}</button>)}</div>

@@ -108,3 +108,7 @@ A migração correspondente está em `supabase/V6_AGENDA_PEDIDOS.sql`.
 - notificações automáticas para novo agendamento, reagendamento, cancelamento e mudanças de status;
 - notificações automáticas para novo pedido e mudanças de status do pedido;
 - estrutura pronta para a próxima etapa de integração com WhatsApp Business API.
+
+## V7.1 — responsividade iOS e Android
+
+A V7.1 mantém as funções da V7 e revisa o painel administrativo para telas móveis. O layout agora é mobile-first, com cabeçalho compacto, navegação inferior fixa, cards responsivos, área segura para iPhone (safe-area), campos com tamanho adequado para toque e comportamento compatível com navegadores móveis Android e iOS. Também foram adicionadas configurações de viewport e PWA para uso em modo standalone.

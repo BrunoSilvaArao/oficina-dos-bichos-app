@@ -12,8 +12,8 @@ const items = [
 
 export default function AdminMobileNav(){
   const pathname=usePathname();
-  return <nav className="admin-mobile-nav">{items.map(([href,icon,label])=>{
+  return <nav className="admin-mobile-nav" aria-label="Navegação administrativa">{items.map(([href,icon,label])=>{
     const active=href==="/admin"?pathname==="/admin":pathname.startsWith(href);
-    return <Link key={href} href={href} className={`admin-mobile-nav-item ${active?"is-active":""}`}><span>{icon}</span><small>{label}</small></Link>;
+    return <Link key={href} href={href} className={`admin-mobile-nav-item ${active?"is-active":""}`} aria-current={active?"page":undefined}><span aria-hidden="true">{icon}</span><small>{label}</small></Link>;
   })}</nav>
 }
