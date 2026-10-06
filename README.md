@@ -112,3 +112,12 @@ A migração correspondente está em `supabase/V6_AGENDA_PEDIDOS.sql`.
 ## V7.1 — responsividade iOS e Android
 
 A V7.1 mantém as funções da V7 e revisa o painel administrativo para telas móveis. O layout agora é mobile-first, com cabeçalho compacto, navegação inferior fixa, cards responsivos, área segura para iPhone (safe-area), campos com tamanho adequado para toque e comportamento compatível com navegadores móveis Android e iOS. Também foram adicionadas configurações de viewport e PWA para uso em modo standalone.
+
+
+## V7.2 — acabamento mobile
+
+- dashboard mais compacto em iOS e Android
+- skeletons de carregamento no admin
+- próximos atendimentos mostram apenas compromissos futuros
+- formulário de produto recolhível no celular
+- ajustes de tipografia, atalhos e estados vazios
