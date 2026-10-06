@@ -97,3 +97,14 @@ Esta versão adiciona:
 - painel administrativo de pedidos, itens, cliente, pagamento, recebimento e status.
 
 A migração correspondente está em `supabase/V6_AGENDA_PEDIDOS.sql`.
+
+
+## V7 - Mobile administrativo e notificações
+
+- painel administrativo redesenhado para uso no celular;
+- navegação inferior fixa no admin;
+- agenda e produtos em cartões no mobile;
+- central de notificações para cliente e clínica;
+- notificações automáticas para novo agendamento, reagendamento, cancelamento e mudanças de status;
+- notificações automáticas para novo pedido e mudanças de status do pedido;
+- estrutura pronta para a próxima etapa de integração com WhatsApp Business API.

@@ -96,6 +96,19 @@ export type BackendOrder = {
   items: BackendOrderItem[];
 };
 
+
+export type BackendNotification = {
+  id: string;
+  audience: "client" | "admin";
+  kind: string;
+  title: string;
+  body: string;
+  appointmentId?: string;
+  orderId?: string;
+  readAt?: string;
+  createdAt: string;
+};
+
 export type BackendProduct = {
   id?: string;
   slug: string;
@@ -428,5 +441,38 @@ export const backend = {
   async updateOrderStatus(id: string, status: string) {
     if (!isSupabaseConfigured()) return;
     await supabaseRest(`orders?id=eq.${encodeURIComponent(id)}`, { method: "PATCH", body: { status }, prefer: "return=minimal" });
+  },
+
+  async notifications(audience?: "client" | "admin"): Promise<BackendNotification[]> {
+    if (!isSupabaseConfigured()) return [];
+    const filter = audience ? `&audience=eq.${audience}` : "";
+    const rows = await supabaseRest<any[]>(`notifications?select=id,audience,kind,title,body,appointment_id,order_id,read_at,created_at${filter}&order=created_at.desc&limit=100`);
+    return rows.map((n) => ({
+      id: n.id,
+      audience: n.audience,
+      kind: n.kind || "info",
+      title: n.title,
+      body: n.body,
+      appointmentId: n.appointment_id || undefined,
+      orderId: n.order_id || undefined,
+      readAt: n.read_at || undefined,
+      createdAt: n.created_at,
+    }));
+  },
+
+  async unreadNotificationCount(audience?: "client" | "admin") {
+    const items = await this.notifications(audience);
+    return items.filter((n) => !n.readAt).length;
+  },
+
+  async markNotificationRead(id: string) {
+    if (!isSupabaseConfigured()) return;
+    await supabaseRest(`notifications?id=eq.${encodeURIComponent(id)}`, { method: "PATCH", body: { read_at: new Date().toISOString() }, prefer: "return=minimal" });
+  },
+
+  async markAllNotificationsRead(audience?: "client" | "admin") {
+    if (!isSupabaseConfigured()) return;
+    const filter = audience ? `&audience=eq.${audience}` : "";
+    await supabaseRest(`notifications?read_at=is.null${filter}`, { method: "PATCH", body: { read_at: new Date().toISOString() }, prefer: "return=minimal" });
   },
 };
