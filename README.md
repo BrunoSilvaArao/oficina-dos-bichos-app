@@ -121,3 +121,9 @@ A V7.1 mantém as funções da V7 e revisa o painel administrativo para telas m�
 - próximos atendimentos mostram apenas compromissos futuros
 - formulário de produto recolhível no celular
 - ajustes de tipografia, atalhos e estados vazios
+
+
+## V7.3 — ajustes brasileiros de interface
+
+- Horários do administrativo usam seleção explícita no formato 24h (09:00, 18:00), consistente em iOS e Android.
+- Telefones nos pedidos são exibidos no padrão brasileiro, como (35) 99991-1553.
